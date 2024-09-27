@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RECS.Core.Tests", "RECS.Cor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RECS.Compiler.Tests", "RECS.Compiler.Tests\RECS.Compiler.Tests.csproj", "{C0AAC3E8-2D56-4474-899E-74EE72C5FB7D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RECS.Engine.Tests", "RECS.Engine.Tests\RECS.Engine.Tests.csproj", "{AF1966ED-DA79-4BE4-AA4E-11CCFC915362}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,5 +40,9 @@ Global
 		{C0AAC3E8-2D56-4474-899E-74EE72C5FB7D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C0AAC3E8-2D56-4474-899E-74EE72C5FB7D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C0AAC3E8-2D56-4474-899E-74EE72C5FB7D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF1966ED-DA79-4BE4-AA4E-11CCFC915362}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF1966ED-DA79-4BE4-AA4E-11CCFC915362}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF1966ED-DA79-4BE4-AA4E-11CCFC915362}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF1966ED-DA79-4BE4-AA4E-11CCFC915362}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
