@@ -58,7 +58,38 @@ namespace RECS.Compiler
     {
         private int labelCounter = 0;
         private Dictionary<string, int> labelPositions = new Dictionary<string, int>();
-        private Dictionary<string, int> pendingLabelReplacements = new Dictionary<string, int>();
+        public Dictionary<string, int> PendingLabelReplacements { get; private set; } =
+            new Dictionary<string, int>();
+
+        // Pools for label management
+        private List<string> availableLabels = new List<string>();
+        private Dictionary<string, bool> usedLabels = new Dictionary<string, bool>();
+
+        // Generate a new label or reuse one from the pool
+        private string getNextLabel(string prefix)
+        {
+            if (availableLabels.Count > 0)
+            {
+                var label = availableLabels[0];
+                availableLabels.RemoveAt(0);
+                return label;
+            }
+            else
+            {
+                var label = $"{prefix}{labelCounter:D3}";
+                labelCounter++;
+                return label;
+            }
+        }
+
+        // Release a label back to the pool
+        private void releaseLabel(string label)
+        {
+            if (!usedLabels.ContainsKey(label))
+                return;
+            usedLabels.Remove(label);
+            availableLabels.Add(label);
+        }
 
         public List<Instruction> Generate(Ruleset ruleset)
         {
@@ -69,13 +100,33 @@ namespace RECS.Compiler
                 instructions.Add(new Instruction { Opcode = Opcode.RULE_START });
 
                 // Encode rule name and priority
-                instructions.AddRange(EncodeString(rule.Name));
+                instructions.AddRange(EncodeString(rule.Name ?? string.Empty));
                 instructions.Add(new Instruction { Opcode = Opcode.PRIORITY });
                 instructions.AddRange(EncodeInteger(rule.Priority));
 
                 // Generate conditions and actions
                 var conditionNode = ConvertConditionGroupToNode(rule.Conditions);
-                instructions.AddRange(GenerateInstructionsForConditions(conditionNode));
+                var successLabel = getNextLabel("L");
+                var failLabel = getNextLabel("L");
+                instructions.AddRange(
+                    GenerateInstructionsForConditions(conditionNode, successLabel, failLabel)
+                );
+
+                // Mark success and fail labels
+                instructions.Add(
+                    new Instruction
+                    {
+                        Opcode = Opcode.LABEL,
+                        Operands = new List<byte>(Encoding.UTF8.GetBytes(successLabel)),
+                    }
+                );
+                instructions.Add(
+                    new Instruction
+                    {
+                        Opcode = Opcode.LABEL,
+                        Operands = new List<byte>(Encoding.UTF8.GetBytes(failLabel)),
+                    }
+                );
 
                 foreach (var action in rule.Actions)
                 {
@@ -91,44 +142,128 @@ namespace RECS.Compiler
             return instructions;
         }
 
-        private List<Instruction> GenerateInstructionsForConditions(ConditionOrGroup conditionNode)
+        private List<Instruction> GenerateInstructionsForConditions(
+            ConditionOrGroup conditionNode,
+            string successLabel,
+            string failLabel
+        )
         {
             var instructions = new List<Instruction>();
 
-            if (conditionNode.Fact != null)
+            // Traverse the 'all' conditions (AND logic)
+            if (conditionNode.All != null && conditionNode.All.Count > 0)
             {
-                var label = "L" + labelCounter++;
-                pendingLabelReplacements[label] = instructions.Count;
-                instructions.Add(GenerateConditionInstruction(conditionNode, false));
+                string nextFailLabel = failLabel;
+                for (int i = 0; i < conditionNode.All.Count; i++)
+                {
+                    var nextSuccessLabel =
+                        i == conditionNode.All.Count - 1 ? successLabel : getNextLabel("L");
+                    instructions.AddRange(
+                        GenerateInstructionsForConditions(
+                            conditionNode.All[i],
+                            nextSuccessLabel,
+                            nextFailLabel
+                        )
+                    );
+                    if (i != conditionNode.All.Count - 1)
+                    {
+                        instructions.Add(
+                            new Instruction
+                            {
+                                Opcode = Opcode.LABEL,
+                                Operands = new List<byte>(Encoding.UTF8.GetBytes(nextSuccessLabel)),
+                            }
+                        );
+                    }
+                }
             }
-
-            foreach (var condition in conditionNode.All ?? new List<ConditionOrGroup>())
+            // Traverse the 'any' conditions (OR logic)
+            else if (conditionNode.Any != null && conditionNode.Any.Count > 0)
             {
-                instructions.AddRange(GenerateInstructionsForConditions(condition));
+                for (int i = 0; i < conditionNode.Any.Count; i++)
+                {
+                    var nextFailLabel =
+                        i == conditionNode.Any.Count - 1 ? failLabel : getNextLabel("L");
+                    instructions.AddRange(
+                        GenerateInstructionsForConditions(
+                            conditionNode.Any[i],
+                            successLabel,
+                            nextFailLabel
+                        )
+                    );
+                    if (i != conditionNode.Any.Count - 1)
+                    {
+                        instructions.Add(
+                            new Instruction
+                            {
+                                Opcode = Opcode.LABEL,
+                                Operands = new List<byte>(Encoding.UTF8.GetBytes(nextFailLabel)),
+                            }
+                        );
+                    }
+                }
             }
-
-            foreach (var condition in conditionNode.Any ?? new List<ConditionOrGroup>())
+            // Base case: single condition (leaf node)
+            else if (conditionNode.Fact != null)
             {
-                instructions.AddRange(GenerateInstructionsForConditions(condition));
+                // Generate condition instruction with jump to failLabel if false, successLabel if true
+                instructions.Add(GenerateConditionInstruction(conditionNode, false)); // JUMP_IF_FALSE to failLabel
+                instructions.Add(
+                    new Instruction
+                    {
+                        Opcode = Opcode.JUMP_IF_TRUE,
+                        Operands = new List<byte>(Encoding.UTF8.GetBytes(successLabel)),
+                    }
+                );
             }
 
             return instructions;
         }
 
-        private void ReplaceLabels(List<Instruction> instructions)
+        public void ReplaceLabels(List<Instruction> instructions)
         {
-            foreach (var label in pendingLabelReplacements)
+            // Step 1: Record all label positions
+            foreach (var instruction in instructions)
             {
-                var labelIndex = label.Value;
-                var labelPosition = labelPositions[label.Key];
+                if (instruction.Opcode == Opcode.LABEL)
+                {
+                    string label = Encoding.UTF8.GetString(instruction.Operands.ToArray());
+                    if (label.Length == 4) // Ensure label is 4 bytes
+                    {
+                        labelPositions[label] = instructions.IndexOf(instruction);
+                    }
+                }
+            }
 
-                // Replace label with actual offset in instruction operands
-                var offsetBytes = BitConverter.GetBytes(labelPosition - labelIndex);
-                instructions[labelIndex].Operands.AddRange(offsetBytes);
+            // Step 2: Replace pending labels with the correct offsets
+            foreach (var entry in PendingLabelReplacements)
+            {
+                string label = entry.Key;
+                int instructionIndex = entry.Value;
+
+                // Check if label position exists
+                if (labelPositions.TryGetValue(label, out int labelPosition))
+                {
+                    // Calculate relative offset from the jump instruction to the label
+                    int offset = labelPosition - instructionIndex - 1; // Relative to next instruction
+
+                    // Convert offset to 4-byte (int) and replace the label
+                    byte[] offsetBytes = BitConverter.GetBytes(offset);
+
+                    // Ensure we replace exactly 4 bytes in the operands (this assumes the operands already reserve 4 bytes for the label)
+                    instructions[instructionIndex].Operands.RemoveRange(0, 4); // Remove 4-byte label
+                    instructions[instructionIndex].Operands.InsertRange(0, offsetBytes); // Insert offset bytes
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Label {label} not found for replacement."
+                    );
+                }
             }
         }
 
-        private Instruction GenerateConditionInstruction(
+        public Instruction GenerateConditionInstruction(
             ConditionOrGroup condition,
             bool isAnyCondition
         )
@@ -138,48 +273,92 @@ namespace RECS.Compiler
                 Opcode = isAnyCondition ? Opcode.JUMP_IF_TRUE : Opcode.JUMP_IF_FALSE,
             };
 
-            // Add fact
-            var factBytes = Encoding.UTF8.GetBytes(condition.Fact ?? string.Empty);
-            instruction.Operands.AddRange(factBytes);
+            // Infer fact type
+            Type factType = condition.Value?.GetType() ?? typeof(string); // Default to string if null
 
-            // Add operator
-            switch (condition.Operator)
+            // Encode the fact
+            var factBytes = Encoding.UTF8.GetBytes(condition.Fact ?? string.Empty);
+            instruction.Operands.AddRange(EncodeString(condition.Fact ?? string.Empty)[1].Operands);
+
+            // Map operator and encode the value based on its type
+            instruction.Opcode = MapOperatorToOpcode(condition.Operator, factType);
+            if (condition.Value != null)
             {
-                case "GT":
-                    instruction.Opcode = Opcode.GT_FLOAT;
-                    break;
-                case "EQ":
-                    instruction.Opcode = Opcode.EQ_FLOAT;
-                    break;
-                case "NEQ":
-                    instruction.Opcode = Opcode.NEQ_FLOAT;
-                    break;
-                case "LT":
-                    instruction.Opcode = Opcode.LT_FLOAT;
-                    break;
-                case "GTE":
-                    instruction.Opcode = Opcode.GTE_FLOAT;
-                    break;
-                case "LTE":
-                    instruction.Opcode = Opcode.LTE_FLOAT;
-                    break;
-                case "CONTAINS":
-                    instruction.Opcode = Opcode.CONTAINS_STRING;
-                    break;
-                case "NOT_CONTAINS":
-                    instruction.Opcode = Opcode.NOT_CONTAINS_STRING;
-                    break;
-                default:
-                    throw new InvalidOperationException(
-                        $"Unsupported operator: {condition.Operator}"
-                    );
+                instruction.Operands.AddRange(EncodeValue(condition.Value));
             }
 
-            // Add value
-            var valueBytes = Encoding.UTF8.GetBytes(condition.Value?.ToString() ?? string.Empty);
-            instruction.Operands.AddRange(valueBytes);
-
             return instruction;
+        }
+
+        private Opcode MapOperatorToOpcode(string operatorStr, Type factType)
+        {
+            if (factType == typeof(float) || factType == typeof(int))
+            {
+                return operatorStr switch
+                {
+                    "GT" => Opcode.GT_FLOAT,
+                    "EQ" => Opcode.EQ_FLOAT,
+                    "NEQ" => Opcode.NEQ_FLOAT,
+                    "LT" => Opcode.LT_FLOAT,
+                    "GTE" => Opcode.GTE_FLOAT,
+                    "LTE" => Opcode.LTE_FLOAT,
+                    _ => throw new InvalidOperationException(
+                        $"Unsupported operator: {operatorStr} for float/int type"
+                    ),
+                };
+            }
+            else if (factType == typeof(string))
+            {
+                return operatorStr switch
+                {
+                    "EQ" => Opcode.EQ_STRING,
+                    "NEQ" => Opcode.NEQ_STRING,
+                    "CONTAINS" => Opcode.CONTAINS_STRING,
+                    "NOT_CONTAINS" => Opcode.NOT_CONTAINS_STRING,
+                    _ => throw new InvalidOperationException(
+                        $"Unsupported operator: {operatorStr} for string type"
+                    ),
+                };
+            }
+            else if (factType == typeof(bool))
+            {
+                return operatorStr switch
+                {
+                    "EQ" => Opcode.EQ_BOOL,
+                    "NEQ" => Opcode.NEQ_BOOL,
+                    _ => throw new InvalidOperationException(
+                        $"Unsupported operator: {operatorStr} for bool type"
+                    ),
+                };
+            }
+            else
+            {
+                throw new InvalidOperationException($"Unsupported fact type: {factType}");
+            }
+        }
+
+        private List<byte> EncodeValue(object value)
+        {
+            if (value is int intValue)
+            {
+                return new List<byte>(BitConverter.GetBytes(intValue));
+            }
+            if (value is float floatValue)
+            {
+                return new List<byte>(BitConverter.GetBytes(floatValue));
+            }
+            if (value is string strValue)
+            {
+                var stringBytes = Encoding.UTF8.GetBytes(strValue);
+                var lengthBytes = BitConverter.GetBytes((ushort)stringBytes.Length);
+                return new List<byte>(lengthBytes.Concat(stringBytes).ToList());
+            }
+            if (value is bool boolValue)
+            {
+                return new List<byte> { (byte)(boolValue ? 1 : 0) };
+            }
+
+            throw new InvalidOperationException($"Unsupported value type: {value?.GetType().Name}");
         }
 
         private Instruction GenerateActionInstruction(RuleAction action)
@@ -228,23 +407,46 @@ namespace RECS.Compiler
         }
 
         // Utility method to encode strings into bytecode
-        private List<Instruction> EncodeString(string str)
+        public List<Instruction> EncodeString(string str)
         {
             var instructions = new List<Instruction>();
-            var length = str.Length > 255 ? 255 : str.Length;
+            var stringBytes = Encoding.UTF8.GetBytes(str);
+            var lengthBytes = BitConverter.GetBytes((ushort)stringBytes.Length); // Ensure 2-byte length
 
-            instructions.Add(new Instruction { Opcode = (Opcode)length });
-            var stringBytes = Encoding.UTF8.GetBytes(str.Substring(0, length));
-            instructions.AddRange(stringBytes.Select(b => new Instruction { Opcode = (Opcode)b }));
+            // Create an instruction for the length and another for the string data
+            instructions.Add(
+                new Instruction
+                {
+                    Opcode = Opcode.LOAD_CONST_STRING,
+                    Operands = new List<byte>(lengthBytes),
+                }
+            );
+            instructions.Add(
+                new Instruction
+                {
+                    Opcode = Opcode.LOAD_CONST_STRING,
+                    Operands = new List<byte>(stringBytes),
+                }
+            );
 
             return instructions;
         }
 
-        // Utility method to encode integers into bytecode
-        private List<Instruction> EncodeInteger(int value)
+        public List<Instruction> EncodeInteger(int value)
         {
-            var bytes = BitConverter.GetBytes(value);
-            return bytes.Select(b => new Instruction { Opcode = (Opcode)b }).ToList();
+            var instructions = new List<Instruction>();
+            var intBytes = BitConverter.GetBytes(value);
+
+            // Fix here: Convert byte[] to List<byte>
+            instructions.Add(
+                new Instruction
+                {
+                    Opcode = Opcode.LOAD_CONST_FLOAT, // or appropriate opcode
+                    Operands = new List<byte>(intBytes),
+                }
+            );
+
+            return instructions;
         }
 
         private ConditionOrGroup ConvertConditionGroupToNode(ConditionGroup conditions)

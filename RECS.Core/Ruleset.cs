@@ -21,10 +21,12 @@ namespace RECS.Core
                 {
                     throw new Exception("Ruleset is empty or invalid.");
                 }
+
                 foreach (var rule in ruleset.Rules)
                 {
-                    rule.Validate();
+                    rule.Validate(); // Ensure the rule and its conditions are valid
                 }
+
                 return ruleset;
             }
             catch (JsonException ex)
@@ -49,7 +51,7 @@ namespace RECS.Core
         public List<RuleAction> Actions { get; set; } = new List<RuleAction>();
 
         [JsonPropertyName("scripts")]
-        public Dictionary<string, Script>? Scripts { get; set; }  // Nullable, as not every rule has a script.
+        public Dictionary<string, Script>? Scripts { get; set; } // Nullable, as not every rule has a script.
 
         public void Validate()
         {
@@ -73,10 +75,10 @@ namespace RECS.Core
     public class ConditionGroup
     {
         [JsonPropertyName("all")]
-        public List<ConditionOrGroup>? All { get; set; }  // Nullable, as a rule may not have both/all/any conditions.
+        public List<ConditionOrGroup>? All { get; set; } // Nullable, as a rule may not have both/all/any conditions.
 
         [JsonPropertyName("any")]
-        public List<ConditionOrGroup>? Any { get; set; }  // Nullable for the same reason as 'All'.
+        public List<ConditionOrGroup>? Any { get; set; } // Nullable for the same reason as 'All'.
 
         public void Validate()
         {
@@ -109,16 +111,35 @@ namespace RECS.Core
         public object Value { get; set; } = new object();
 
         [JsonPropertyName("all")]
-        public List<ConditionOrGroup>? All { get; set; }  // Nullable, for nested conditions.
+        public List<ConditionOrGroup>? All { get; set; } // Nullable, for nested conditions.
 
         [JsonPropertyName("any")]
-        public List<ConditionOrGroup>? Any { get; set; }  // Nullable, for nested conditions.
+        public List<ConditionOrGroup>? Any { get; set; } // Nullable, for nested conditions.
 
         public void Validate()
         {
             if (All == null && Any == null && string.IsNullOrWhiteSpace(Fact))
             {
-                throw new Exception("Either a fact or nested conditions (all/any) must be provided.");
+                throw new Exception(
+                    "Either a fact or nested conditions (all/any) must be provided."
+                );
+            }
+
+            // Ensure the operator is provided if it's a single condition
+            if (string.IsNullOrWhiteSpace(Operator))
+            {
+                throw new Exception($"Operator is missing for fact '{Fact}'.");
+            }
+
+            // Recursively validate nested conditions
+            foreach (var condition in All ?? new List<ConditionOrGroup>())
+            {
+                condition.Validate();
+            }
+
+            foreach (var condition in Any ?? new List<ConditionOrGroup>())
+            {
+                condition.Validate();
             }
         }
     }
@@ -146,7 +167,7 @@ namespace RECS.Core
     public class Script
     {
         [JsonPropertyName("params")]
-        public List<string>? Params { get; set; }  // Nullable, because not all scripts may have parameters.
+        public List<string>? Params { get; set; } // Nullable, because not all scripts may have parameters.
 
         [JsonPropertyName("body")]
         public string Body { get; set; } = string.Empty;
