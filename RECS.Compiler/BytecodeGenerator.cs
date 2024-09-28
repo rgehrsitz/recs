@@ -377,7 +377,8 @@ namespace RECS.Compiler
             return instruction;
         }
 
-        private Instruction GenerateScriptInstruction(Script script, string scriptName)
+        // Script definition handling, called during rule setup or condition evaluation
+        public Instruction GenerateScriptInstruction(Script script, string scriptName)
         {
             var instruction = new Instruction { Opcode = Opcode.SCRIPT_DEF };
 
@@ -530,6 +531,35 @@ namespace RECS.Compiler
 
             // Remove unused labels
             return optimizedInstructions.FindAll(instr => instr.Opcode != Opcode.LABEL);
+        }
+
+        // Script call handling during condition or bytecode execution phase
+        private Instruction GenerateScriptCallInstruction(
+            string scriptName,
+            List<string> parameters
+        )
+        {
+            var instruction = new Instruction { Opcode = Opcode.SCRIPT_CALL };
+
+            // Add script name
+            var scriptNameBytes = Encoding.UTF8.GetBytes(scriptName);
+            instruction.Operands.AddRange(scriptNameBytes);
+
+            // Add parameters
+            var paramCount = parameters?.Count ?? 0;
+            var paramCountBytes = BitConverter.GetBytes(paramCount);
+            instruction.Operands.AddRange(paramCountBytes);
+
+            if (parameters != null)
+            {
+                foreach (var param in parameters)
+                {
+                    var paramBytes = Encoding.UTF8.GetBytes(param);
+                    instruction.Operands.AddRange(paramBytes);
+                }
+            }
+
+            return instruction;
         }
     }
 }
