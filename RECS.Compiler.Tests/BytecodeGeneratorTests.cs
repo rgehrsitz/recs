@@ -1,14 +1,124 @@
 // RECS.Compiler.Tests/BytecodeGeneratorTests.cs
 
-using System.Collections.Generic;
 using System.Text;
 using RECS.Core;
-using Xunit;
+using Serilog;
+using Serilog.Sinks.TestCorrelator;
 
 namespace RECS.Compiler.Tests
 {
     public class BytecodeGeneratorTests
     {
+        public BytecodeGeneratorTests()
+        {
+            // Configure Serilog for testing purposes
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Debug()
+                .WriteTo.Console() // Add console output for visibility
+                .WriteTo
+                .File("logs/recs_tests.log", rollingInterval: RollingInterval.Day) // Add file sink to store logs
+                .WriteTo.TestCorrelator() // Use TestCorrelator for assertions
+                .CreateLogger();
+        }
+
+        [Fact]
+        public void Generate_ValidRuleset_ShouldLogBytecodeGeneration()
+        {
+            using (TestCorrelator.CreateContext())
+            {
+                var ruleset = new Ruleset
+                {
+                    Rules = new List<Rule>
+                    {
+                        new Rule
+                        {
+                            Name = "TestRule",
+                            Priority = 1,
+                            Conditions = new ConditionGroup
+                            {
+                                All = new List<ConditionOrGroup>
+                                {
+                                    new ConditionOrGroup
+                                    {
+                                        Fact = "temperature",
+                                        Operator = "GT",
+                                        Value = 30,
+                                    },
+                                },
+                            },
+                            Actions = new List<RuleAction>
+                            {
+                                new RuleAction
+                                {
+                                    Type = "print",
+                                    Target = "console",
+                                    Value = "Temperature is greater than 30",
+                                },
+                            },
+                        },
+                    },
+                };
+
+                var generator = new BytecodeGenerator();
+                var bytecode = generator.Generate(ruleset);
+
+                // Explicitly flush the logs
+                Log.CloseAndFlush();
+
+                // Assert that logs contain specific messages
+                Assert.NotEmpty(bytecode);
+                Assert.Contains(
+                    TestCorrelator.GetLogEventsFromCurrentContext(),
+                    logEvent =>
+                        logEvent.MessageTemplate.Text.Contains(
+                            "Generating bytecode for rule: TestRule"
+                        )
+                );
+                Assert.Contains(
+                    TestCorrelator.GetLogEventsFromCurrentContext(),
+                    logEvent =>
+                        logEvent.MessageTemplate.Text.Contains(
+                            "Adding action: print to target console"
+                        )
+                );
+            }
+        }
+
+        [Fact]
+        public void ReplaceLabels_ShouldLogLabelReplacement()
+        {
+            using (TestCorrelator.CreateContext())
+            {
+                var generator = new BytecodeGenerator();
+                var instructions = new List<Instruction>
+                {
+                    new() {
+                        Opcode = Opcode.Label,
+                        Operands = new List<byte>(System.Text.Encoding.UTF8.GetBytes("L001")),
+                    },
+                    new() {
+
+                        Opcode = Opcode.JumpIfFalse,
+                        Operands = new List<byte>(BitConverter.GetBytes(0)),
+                    },
+                };
+
+                generator.ReplaceLabels(instructions);
+
+                // Explicitly flush the logs
+                Log.CloseAndFlush();
+
+                // Assert that logs contain label replacement
+                Assert.Contains(
+                    TestCorrelator.GetLogEventsFromCurrentContext(),
+                    logEvent =>
+                        logEvent.MessageTemplate.Text.Contains(
+                            "Replacing labels with actual offsets"
+                        )
+                );
+            }
+        }
+
         [Fact]
         public void Generate_ValidRuleset_ReturnsBytecode()
         {
@@ -42,12 +152,13 @@ namespace RECS.Compiler.Tests
             var bytecode = generator.Generate(ruleset);
 
             // Temporary debugging to inspect bytecode
-            foreach (var instruction in bytecode)
-            {
-                Console.WriteLine(
-                    $"Opcode: {instruction.Opcode}, Operands: {BitConverter.ToString(instruction.Operands.ToArray())}"
-                );
-            }
+            // foreach (var instruction in bytecode)
+            // {
+            //     _testOutputHelper.WriteLine(
+            //         $"Opcode: {instruction.Opcode}, Operands: {BitConverter.ToString(instruction.Operands.ToArray())}"
+            //     );
+            // }
+
 
             // Update expectations based on new structure
             Assert.NotEmpty(bytecode);
@@ -99,9 +210,9 @@ namespace RECS.Compiler.Tests
             var bytecode = generator.Generate(ruleset);
 
             Assert.NotEmpty(bytecode);
-            Assert.Contains(bytecode, instr => instr.Opcode == Opcode.RULE_START);
-            Assert.Contains(bytecode, instr => instr.Opcode == Opcode.JUMP_IF_FALSE);
-            Assert.Contains(bytecode, instr => instr.Opcode == Opcode.EXECUTE_ACTION);
+            Assert.Contains(bytecode, instr => instr.Opcode == Opcode.RuleStart);
+            Assert.Contains(bytecode, instr => instr.Opcode == Opcode.JumpIfFalse);
+            Assert.Contains(bytecode, instr => instr.Opcode == Opcode.ExecuteAction);
         }
 
         [Fact]
@@ -113,12 +224,12 @@ namespace RECS.Compiler.Tests
             {
                 new Instruction
                 {
-                    Opcode = Opcode.JUMP_IF_FALSE,
+                    Opcode = Opcode.JumpIfFalse,
                     Operands = new List<byte>(Encoding.UTF8.GetBytes("L001")),
                 },
                 new Instruction
                 {
-                    Opcode = Opcode.LABEL,
+                    Opcode = Opcode.Label,
                     Operands = new List<byte>(Encoding.UTF8.GetBytes("L001")),
                 },
             };
@@ -148,13 +259,13 @@ namespace RECS.Compiler.Tests
             var lengthInstruction = instructions[0];
             var stringInstruction = instructions[1];
 
-            Assert.Equal(Opcode.LOAD_CONST_STRING, lengthInstruction.Opcode);
+            Assert.Equal(Opcode.LoadConstString, lengthInstruction.Opcode);
             Assert.Equal(
                 (ushort)testString.Length,
                 BitConverter.ToUInt16(lengthInstruction.Operands.ToArray())
             );
 
-            Assert.Equal(Opcode.LOAD_CONST_STRING, stringInstruction.Opcode);
+            Assert.Equal(Opcode.LoadConstString, stringInstruction.Opcode);
             Assert.Equal(testString, Encoding.UTF8.GetString(stringInstruction.Operands.ToArray()));
         }
 
@@ -166,11 +277,11 @@ namespace RECS.Compiler.Tests
             var testInteger = 42;
 
             // Act
-            var instructions = generator.EncodeInteger(testInteger);
+            var instructions = BytecodeGenerator.EncodeInteger(testInteger);
 
             // Assert: Check that the integer is encoded properly
             var integerInstruction = instructions[0];
-            Assert.Equal(Opcode.LOAD_CONST_FLOAT, integerInstruction.Opcode);
+            Assert.Equal(Opcode.LoadConstFloat, integerInstruction.Opcode);
             Assert.Equal(testInteger, BitConverter.ToInt32(integerInstruction.Operands.ToArray()));
         }
 
@@ -190,7 +301,7 @@ namespace RECS.Compiler.Tests
             var instruction = generator.GenerateConditionInstruction(condition, false);
 
             // Assert: Verify that the opcode and operands are correct
-            Assert.Equal(Opcode.GT_FLOAT, instruction.Opcode);
+            Assert.Equal(Opcode.GtFloat, instruction.Opcode);
             Assert.Equal(
                 "temperature",
                 Encoding.UTF8.GetString(instruction.Operands.GetRange(0, 11).ToArray())
@@ -214,6 +325,159 @@ namespace RECS.Compiler.Tests
             Assert.Throws<InvalidOperationException>(
                 () => generator.GenerateConditionInstruction(condition, false)
             );
+        }
+
+        [Fact]
+        public void Generate_ShouldSkipRedundantRule_WithEmptyConditions()
+        {
+            var ruleset = new Ruleset
+            {
+                Rules = new List<Rule>
+                {
+                    new Rule
+                    {
+                        Name = "EmptyConditionsRule",
+                        Priority = 1,
+                        Conditions =
+                            new ConditionGroup() // No conditions defined
+                        ,
+                    },
+                },
+            };
+
+            var generator = new BytecodeGenerator();
+            var bytecode = generator.Generate(ruleset);
+
+            // Assert that no instructions were generated for the redundant rule
+            Assert.Empty(bytecode);
+        }
+
+        [Fact]
+        public void Generate_ShouldSkipRedundantRule_WithAlwaysTrueCondition()
+        {
+            var ruleset = new Ruleset
+            {
+                Rules = new List<Rule>
+                {
+                    new Rule
+                    {
+                        Name = "AlwaysTrueConditionRule",
+                        Priority = 1,
+                        Conditions = new ConditionGroup
+                        {
+                            All = new List<ConditionOrGroup>
+                            {
+                                new ConditionOrGroup
+                                {
+                                    Fact = "temperature",
+                                    Operator = "EQ",
+                                    Value =
+                                        "temperature" // Always true condition
+                                    ,
+                                },
+                            },
+                        },
+                    },
+                },
+            };
+
+            var generator = new BytecodeGenerator();
+            var bytecode = generator.Generate(ruleset);
+
+            // Assert that no instructions were generated for the redundant rule
+            Assert.Empty(bytecode);
+        }
+
+        [Fact]
+        public void Generate_ShouldIncludeRule_WithValidConditions()
+        {
+            var ruleset = new Ruleset
+            {
+                Rules = new List<Rule>
+                {
+                    new Rule
+                    {
+                        Name = "ValidConditionRule",
+                        Priority = 1,
+                        Conditions = new ConditionGroup
+                        {
+                            All = new List<ConditionOrGroup>
+                            {
+                                new ConditionOrGroup
+                                {
+                                    Fact = "temperature",
+                                    Operator = "GT",
+                                    Value = 30,
+                                },
+                            },
+                        },
+                        Actions = new List<RuleAction>
+                        {
+                            new RuleAction
+                            {
+                                Type = "print",
+                                Target = "console",
+                                Value = "Temperature is greater than 30",
+                            },
+                        },
+                    },
+                },
+            };
+
+            var generator = new BytecodeGenerator();
+            var bytecode = generator.Generate(ruleset);
+
+            // Assert that instructions were generated for the valid rule
+            Assert.NotEmpty(bytecode);
+            Assert.Contains(bytecode, instr => instr.Opcode == Opcode.RuleStart);
+            Assert.Contains(bytecode, instr => instr.Opcode == Opcode.RuleEnd);
+        }
+
+        [Fact]
+        public void Generate_ShouldSkipRedundantAction_WithEmptyActionTarget()
+        {
+            var ruleset = new Ruleset
+            {
+                Rules = new List<Rule>
+                {
+                    new Rule
+                    {
+                        Name = "EmptyActionTargetRule",
+                        Priority = 1,
+                        Conditions = new ConditionGroup
+                        {
+                            All = new List<ConditionOrGroup>
+                            {
+                                new ConditionOrGroup
+                                {
+                                    Fact = "temperature",
+                                    Operator = "GT",
+                                    Value = 30,
+                                },
+                            },
+                        },
+                        Actions = new List<RuleAction>
+                        {
+                            new RuleAction
+                            {
+                                Type = "print",
+                                Target =
+                                    "" // Redundant action with empty target
+                                ,
+                            },
+                        },
+                    },
+                },
+            };
+
+            var generator = new BytecodeGenerator();
+            var bytecode = generator.Generate(ruleset);
+
+            // Assert that the action was skipped, but the rule instructions were generated
+            Assert.NotEmpty(bytecode);
+            Assert.Contains(bytecode, instr => instr.Opcode == Opcode.RuleStart);
+            Assert.Contains(bytecode, instr => instr.Opcode == Opcode.RuleEnd);
+            Assert.DoesNotContain(bytecode, instr => instr.Opcode == Opcode.ExecuteAction);
         }
     }
 }

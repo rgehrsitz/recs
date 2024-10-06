@@ -1,7 +1,5 @@
 // RECS/RECS.Core/Ruleset.cs
 
-using System;
-using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -9,8 +7,11 @@ namespace RECS.Core
 {
     public class Ruleset
     {
+        [JsonPropertyName("version")]
+        public string Version { get; init; } = "1.0";
+        
         [JsonPropertyName("rules")]
-        public List<Rule> Rules { get; set; } = new List<Rule>();
+        public List<Rule> Rules { get; init; } = new List<Rule>();
 
         public static Ruleset Parse(string jsonData)
         {
@@ -39,19 +40,31 @@ namespace RECS.Core
     public class Rule
     {
         [JsonPropertyName("name")]
-        public string Name { get; set; } = string.Empty;
+        public string Name { get; init; } = string.Empty;
 
         [JsonPropertyName("priority")]
-        public int Priority { get; set; }
+        public int Priority { get; init; }
 
         [JsonPropertyName("conditions")]
-        public ConditionGroup Conditions { get; set; } = new ConditionGroup();
+        public ConditionGroup Conditions { get; init; } = new();
 
         [JsonPropertyName("actions")]
-        public List<RuleAction> Actions { get; set; } = new List<RuleAction>();
+        public List<RuleAction> Actions { get; init; } = [];
 
         [JsonPropertyName("scripts")]
-        public Dictionary<string, Script>? Scripts { get; set; } // Nullable, as not every rule has a script.
+        public Dictionary<string, UserScript>? Scripts { get; init; } // Nullable, as not every rule has a script.
+        
+        [JsonPropertyName("description")]
+        public string? Description { get; set; }
+
+        [JsonPropertyName("enabled")]
+        public bool Enabled { get; set; } = true;
+        
+        public bool Evaluate(Dictionary<string, object> facts)
+        {
+            // Implement rule evaluation logic here
+            return Conditions.Evaluate(facts);
+        }
 
         public void Validate()
         {
@@ -64,7 +77,7 @@ namespace RECS.Core
                 throw new Exception($"Rule '{Name}' has a negative priority.");
             }
 
-            Conditions?.Validate();
+            Conditions.Validate();
             foreach (var action in Actions)
             {
                 action.Validate();
@@ -75,10 +88,17 @@ namespace RECS.Core
     public class ConditionGroup
     {
         [JsonPropertyName("all")]
-        public List<ConditionOrGroup>? All { get; set; } // Nullable, as a rule may not have both/all/any conditions.
+        public List<ConditionOrGroup>? All { get; init; } // Nullable, as a rule may not have both/all/any conditions.
 
         [JsonPropertyName("any")]
         public List<ConditionOrGroup>? Any { get; set; } // Nullable for the same reason as 'All'.
+        
+        public bool Evaluate(Dictionary<string, object> facts)
+        {
+            bool allResult = All?.All(c => c.Evaluate(facts)) ?? true;
+            bool anyResult = Any?.Any(c => c.Evaluate(facts)) ?? true;
+            return allResult && anyResult;
+        }
 
         public void Validate()
         {
@@ -102,19 +122,94 @@ namespace RECS.Core
     public class ConditionOrGroup
     {
         [JsonPropertyName("fact")]
-        public string Fact { get; set; } = string.Empty;
+        public string Fact { get; init; } = string.Empty;
 
         [JsonPropertyName("operator")]
-        public string Operator { get; set; } = string.Empty;
+        public string Operator { get; init; } = string.Empty;
+
+        private object? _value; // Backing field for the value
 
         [JsonPropertyName("value")]
-        public object Value { get; set; } = new object();
+        public JsonElement JsonValue { get; set; } // Temporarily hold the JsonElement
+
+        [JsonIgnore]
+        public object Value
+        {
+            get
+            {
+                // Return the backing field if it has been set
+                if (_value != null)
+                {
+                    return _value;
+                }
+
+                // Otherwise, return based on JsonValue conversion
+                switch (JsonValue.ValueKind)
+                {
+                    case JsonValueKind.Number:
+                        if (JsonValue.TryGetInt32(out int intValue))
+                        {
+                            return intValue;
+                        }
+                        if (JsonValue.TryGetDouble(out double doubleValue))
+                        {
+                            return doubleValue;
+                        }
+                        break;
+                    case JsonValueKind.String:
+                        return JsonValue.GetString() ?? string.Empty;
+                    case JsonValueKind.True:
+                    case JsonValueKind.False:
+                        return JsonValue.GetBoolean();
+                }
+
+                throw new InvalidOperationException(
+                    $"Unsupported fact value type: {JsonValue.ValueKind}"
+                );
+            }
+            init => _value = value;
+        }
 
         [JsonPropertyName("all")]
-        public List<ConditionOrGroup>? All { get; set; } // Nullable, for nested conditions.
+        public List<ConditionOrGroup>? All { get; set; }
 
         [JsonPropertyName("any")]
-        public List<ConditionOrGroup>? Any { get; set; } // Nullable, for nested conditions.
+        public List<ConditionOrGroup>? Any { get; set; }
+        
+        public bool Evaluate(Dictionary<string, object> facts)
+        {
+            if (All != null || Any != null)
+            {
+                bool allResult = All?.All(c => c.Evaluate(facts)) ?? true;
+                bool anyResult = Any?.Any(c => c.Evaluate(facts)) ?? true;
+                return allResult && anyResult;
+            }
+
+            if (!facts.TryGetValue(Fact, out var factValue))
+            {
+                return false;
+            }
+
+            return CompareValues(factValue, Value, Operator);
+        }
+
+        private bool CompareValues(object factValue, object conditionValue, string @operator)
+        {
+            // Implement comparison logic based on the operator
+            // This is a simplified version; you may need to handle more cases
+            return @operator switch
+            {
+                "EQ" => factValue.Equals(conditionValue),
+                "NEQ" => !factValue.Equals(conditionValue),
+                "GT" => Convert.ToDouble(factValue) > Convert.ToDouble(conditionValue),
+                "LT" => Convert.ToDouble(factValue) < Convert.ToDouble(conditionValue),
+                "GTE" => Convert.ToDouble(factValue) >= Convert.ToDouble(conditionValue),
+                "LTE" => Convert.ToDouble(factValue) <= Convert.ToDouble(conditionValue),
+                "CONTAINS" => factValue.ToString()!.Contains(conditionValue.ToString() ?? string.Empty),
+                "NOT_CONTAINS" => !factValue.ToString()!.Contains(conditionValue.ToString() ?? string.Empty),
+                _ => throw new NotSupportedException($"Operator '{@operator}' is not supported."),
+            };
+        }
 
         public void Validate()
         {
@@ -125,13 +220,11 @@ namespace RECS.Core
                 );
             }
 
-            // Ensure the operator is provided if it's a single condition
             if (string.IsNullOrWhiteSpace(Operator))
             {
                 throw new Exception($"Operator is missing for fact '{Fact}'.");
             }
 
-            // Recursively validate nested conditions
             foreach (var condition in All ?? new List<ConditionOrGroup>())
             {
                 condition.Validate();
@@ -147,13 +240,20 @@ namespace RECS.Core
     public class RuleAction
     {
         [JsonPropertyName("type")]
-        public string Type { get; set; } = string.Empty;
+        public string Type { get; init; } = string.Empty;
 
         [JsonPropertyName("target")]
-        public string Target { get; set; } = string.Empty;
+        public string Target { get; init; } = string.Empty;
 
         [JsonPropertyName("value")]
-        public object Value { get; set; } = new object();
+        public object Value { get; init; } = new object();
+        
+        public void Execute(Dictionary<string, object> facts)
+        {
+            // Implement action execution logic here
+            Console.WriteLine($"Executing action: {Type} on {Target} with value {Value}");
+            // You may want to implement more sophisticated action handling based on the Type
+        }
 
         public void Validate()
         {
@@ -164,12 +264,22 @@ namespace RECS.Core
         }
     }
 
-    public class Script
+    public class UserScript
     {
         [JsonPropertyName("params")]
         public List<string>? Params { get; set; } // Nullable, because not all scripts may have parameters.
 
         [JsonPropertyName("body")]
         public string Body { get; set; } = string.Empty;
+        
+        public Func<Dictionary<string, object>, object> Compile()
+        {
+            // This is a placeholder. You'll need to implement actual script compilation logic
+            // using a JavaScript engine like Jint or a C# scripting solution.
+            return (facts) => {
+                Console.WriteLine($"Executing script with params: {string.Join(", ", Params ?? new List<string>())}");
+                return null!;
+            };
+        }
     }
 }

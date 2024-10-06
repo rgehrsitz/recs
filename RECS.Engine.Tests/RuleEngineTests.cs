@@ -15,12 +15,12 @@ namespace RECS.Engine.Tests
             {
                 new Instruction
                 {
-                    Opcode = Opcode.JUMP_IF_FALSE,
+                    Opcode = Opcode.JumpIfFalse,
                     Operands = new List<byte>(System.Text.Encoding.UTF8.GetBytes("temperature>30")),
                 },
                 new Instruction
                 {
-                    Opcode = Opcode.EXECUTE_ACTION,
+                    Opcode = Opcode.ExecuteAction,
                     Operands = new List<byte>(System.Text.Encoding.UTF8.GetBytes("print")),
                 },
             };
@@ -46,12 +46,12 @@ namespace RECS.Engine.Tests
             {
                 new Instruction
                 {
-                    Opcode = Opcode.JUMP_IF_FALSE,
+                    Opcode = Opcode.JumpIfFalse,
                     Operands = new List<byte>(System.Text.Encoding.UTF8.GetBytes("temperature>30")),
                 },
                 new Instruction
                 {
-                    Opcode = Opcode.EXECUTE_ACTION,
+                    Opcode = Opcode.ExecuteAction,
                     Operands = new List<byte>(System.Text.Encoding.UTF8.GetBytes("print")),
                 },
             };
