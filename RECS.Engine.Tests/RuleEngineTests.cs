@@ -1,8 +1,4 @@
-using System;
-using System.Collections.Generic;
 using RECS.Compiler;
-using RECS.Core;
-using Xunit;
 
 namespace RECS.Engine.Tests
 {
@@ -13,15 +9,15 @@ namespace RECS.Engine.Tests
         {
             var bytecode = new List<Instruction>
             {
-                new Instruction
+                new()
                 {
                     Opcode = Opcode.JumpIfFalse,
-                    Operands = new List<byte>(System.Text.Encoding.UTF8.GetBytes("temperature>30")),
+                    Operands = [.."temperature>30"u8.ToArray()],
                 },
-                new Instruction
+                new()
                 {
                     Opcode = Opcode.ExecuteAction,
-                    Operands = new List<byte>(System.Text.Encoding.UTF8.GetBytes("print")),
+                    Operands = [.."print"u8.ToArray()],
                 },
             };
 
@@ -30,13 +26,11 @@ namespace RECS.Engine.Tests
             engine.SetFact("temperature", 35);
 
             // Capture the console output
-            using (var consoleOutput = new System.IO.StringWriter())
-            {
-                Console.SetOut(consoleOutput);
-                engine.Execute();
+            using var consoleOutput = new StringWriter();
+            Console.SetOut(consoleOutput);
+            engine.Execute();
 
-                Assert.Contains("Executing action: Print to console.", consoleOutput.ToString());
-            }
+            Assert.Contains("Executing action: Print to console.", consoleOutput.ToString());
         }
 
         [Fact]
@@ -44,15 +38,15 @@ namespace RECS.Engine.Tests
         {
             var bytecode = new List<Instruction>
             {
-                new Instruction
+                new()
                 {
                     Opcode = Opcode.JumpIfFalse,
-                    Operands = new List<byte>(System.Text.Encoding.UTF8.GetBytes("temperature>30")),
+                    Operands = [.."temperature>30"u8.ToArray()],
                 },
-                new Instruction
+                new()
                 {
                     Opcode = Opcode.ExecuteAction,
-                    Operands = new List<byte>(System.Text.Encoding.UTF8.GetBytes("print")),
+                    Operands = [.."print"u8.ToArray()],
                 },
             };
 
@@ -61,16 +55,14 @@ namespace RECS.Engine.Tests
             engine.SetFact("temperature", 25);
 
             // Capture the console output
-            using (var consoleOutput = new System.IO.StringWriter())
-            {
-                Console.SetOut(consoleOutput);
-                engine.Execute();
+            using var consoleOutput = new StringWriter();
+            Console.SetOut(consoleOutput);
+            engine.Execute();
 
-                Assert.DoesNotContain(
-                    "Executing action: Print to console.",
-                    consoleOutput.ToString()
-                );
-            }
+            Assert.DoesNotContain(
+                "Executing action: Print to console.",
+                consoleOutput.ToString()
+            );
         }
     }
 }
