@@ -9,9 +9,9 @@ namespace RECS.Core
     {
         [JsonPropertyName("version")]
         public string Version { get; init; } = "1.0";
-        
+
         [JsonPropertyName("rules")]
-        public List<Rule> Rules { get; init; } = new List<Rule>();
+        public List<Rule> Rules { get; init; } = [];
 
         public static Ruleset Parse(string jsonData)
         {
@@ -53,13 +53,13 @@ namespace RECS.Core
 
         [JsonPropertyName("scripts")]
         public Dictionary<string, UserScript>? Scripts { get; init; } // Nullable, as not every rule has a script.
-        
+
         [JsonPropertyName("description")]
         public string? Description { get; set; }
 
         [JsonPropertyName("enabled")]
         public bool Enabled { get; set; } = true;
-        
+
         public bool Evaluate(Dictionary<string, object> facts)
         {
             // Implement rule evaluation logic here
@@ -92,7 +92,7 @@ namespace RECS.Core
 
         [JsonPropertyName("any")]
         public List<ConditionOrGroup>? Any { get; set; } // Nullable for the same reason as 'All'.
-        
+
         public bool Evaluate(Dictionary<string, object> facts)
         {
             bool allResult = All?.All(c => c.Evaluate(facts)) ?? true;
@@ -107,12 +107,12 @@ namespace RECS.Core
                 throw new Exception("At least one condition (all or any) must be defined.");
             }
 
-            foreach (var condition in All ?? new List<ConditionOrGroup>())
+            foreach (var condition in All ?? [])
             {
                 condition.Validate();
             }
 
-            foreach (var condition in Any ?? new List<ConditionOrGroup>())
+            foreach (var condition in Any ?? [])
             {
                 condition.Validate();
             }
@@ -175,7 +175,7 @@ namespace RECS.Core
 
         [JsonPropertyName("any")]
         public List<ConditionOrGroup>? Any { get; set; }
-        
+
         public bool Evaluate(Dictionary<string, object> facts)
         {
             if (All != null || Any != null)
@@ -205,8 +205,12 @@ namespace RECS.Core
                 "LT" => Convert.ToDouble(factValue) < Convert.ToDouble(conditionValue),
                 "GTE" => Convert.ToDouble(factValue) >= Convert.ToDouble(conditionValue),
                 "LTE" => Convert.ToDouble(factValue) <= Convert.ToDouble(conditionValue),
-                "CONTAINS" => factValue.ToString()!.Contains(conditionValue.ToString() ?? string.Empty),
-                "NOT_CONTAINS" => !factValue.ToString()!.Contains(conditionValue.ToString() ?? string.Empty),
+                "CONTAINS" => factValue
+                    .ToString()!
+                    .Contains(conditionValue.ToString() ?? string.Empty),
+                "NOT_CONTAINS" => !factValue
+                    .ToString()!
+                    .Contains(conditionValue.ToString() ?? string.Empty),
                 _ => throw new NotSupportedException($"Operator '{@operator}' is not supported."),
             };
         }
@@ -225,12 +229,12 @@ namespace RECS.Core
                 throw new Exception($"Operator is missing for fact '{Fact}'.");
             }
 
-            foreach (var condition in All ?? new List<ConditionOrGroup>())
+            foreach (var condition in All ?? [])
             {
                 condition.Validate();
             }
 
-            foreach (var condition in Any ?? new List<ConditionOrGroup>())
+            foreach (var condition in Any ?? [])
             {
                 condition.Validate();
             }
@@ -247,7 +251,7 @@ namespace RECS.Core
 
         [JsonPropertyName("value")]
         public object Value { get; init; } = new object();
-        
+
         public void Execute(Dictionary<string, object> facts)
         {
             // Implement action execution logic here
@@ -271,13 +275,16 @@ namespace RECS.Core
 
         [JsonPropertyName("body")]
         public string Body { get; set; } = string.Empty;
-        
+
         public Func<Dictionary<string, object>, object> Compile()
         {
             // This is a placeholder. You'll need to implement actual script compilation logic
             // using a JavaScript engine like Jint or a C# scripting solution.
-            return (facts) => {
-                Console.WriteLine($"Executing script with params: {string.Join(", ", Params ?? new List<string>())}");
+            return (facts) =>
+            {
+                Console.WriteLine(
+                    $"Executing script with params: {string.Join(", ", Params ?? [])}"
+                );
                 return null!;
             };
         }

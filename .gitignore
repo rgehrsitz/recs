@@ -396,3 +396,5 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+.idea/.idea.RECS/.idea/cody_history.xml
+.idea/.idea.RECS/.idea/material_theme_project_new.xml

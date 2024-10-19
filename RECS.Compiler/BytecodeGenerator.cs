@@ -49,7 +49,7 @@ namespace RECS.Compiler
     public class Instruction
     {
         public Opcode Opcode { get; set; }
-        public List<byte> Operands { get; set; } = new List<byte>();
+        public List<byte> Operands { get; set; } = [];
 
         public int Size => 1 + Operands.Count; // 1 byte for opcode + size of operands
     }
@@ -57,13 +57,12 @@ namespace RECS.Compiler
     public class BytecodeGenerator
     {
         private int _labelCounter;
-        private Dictionary<string, int> _labelPositions = new Dictionary<string, int>();
-        public Dictionary<string, int> PendingLabelReplacements { get; private set; } = 
-            new Dictionary<string, int>();
+        private Dictionary<string, int> _labelPositions = [];
+        public Dictionary<string, int> PendingLabelReplacements { get; private set; } = [];
 
         // Pools for label management
-        private List<string> _availableLabels = new List<string>();
-        private Dictionary<string, bool> _usedLabels = new Dictionary<string, bool>();
+        private List<string> _availableLabels = [];
+        private Dictionary<string, bool> _usedLabels = [];
 
         // Generate a new label or reuse one from the pool
         private string GetNextLabel(string prefix)
@@ -102,7 +101,7 @@ namespace RECS.Compiler
             {
                 Log.Information($"Generating bytecode for rule: {rule.Name}");
                 instructions.Add(new Instruction { Opcode = Opcode.RuleStart });
-                
+
                 // Encode rule name and priority
                 instructions.AddRange(EncodeString(rule.Name));
                 instructions.Add(new Instruction { Opcode = Opcode.Priority });
@@ -112,11 +111,25 @@ namespace RECS.Compiler
                 var conditionNode = ConvertConditionGroupToNode(rule.Conditions);
                 var successLabel = GetNextLabel("L");
                 var failLabel = GetNextLabel("L");
-                instructions.AddRange(GenerateInstructionsForConditions(conditionNode, successLabel, failLabel));
+                instructions.AddRange(
+                    GenerateInstructionsForConditions(conditionNode, successLabel, failLabel)
+                );
 
                 // Mark success and fail labels
-                instructions.Add(new Instruction { Opcode = Opcode.Label, Operands = new List<byte>(Encoding.UTF8.GetBytes(successLabel)) });
-                instructions.Add(new Instruction { Opcode = Opcode.Label, Operands = new List<byte>(Encoding.UTF8.GetBytes(failLabel)) });
+                instructions.Add(
+                    new Instruction
+                    {
+                        Opcode = Opcode.Label,
+                        Operands = new List<byte>(Encoding.UTF8.GetBytes(successLabel)),
+                    }
+                );
+                instructions.Add(
+                    new Instruction
+                    {
+                        Opcode = Opcode.Label,
+                        Operands = new List<byte>(Encoding.UTF8.GetBytes(failLabel)),
+                    }
+                );
 
                 foreach (var action in rule.Actions)
                 {
@@ -173,12 +186,17 @@ namespace RECS.Compiler
                 }
                 else
                 {
-                    throw new InvalidOperationException($"Label {label} not found for replacement.");
+                    throw new InvalidOperationException(
+                        $"Label {label} not found for replacement."
+                    );
                 }
             }
         }
 
-        public Instruction GenerateConditionInstruction(ConditionOrGroup condition, bool isAnyCondition)
+        public Instruction GenerateConditionInstruction(
+            ConditionOrGroup condition,
+            bool isAnyCondition
+        )
         {
             var instruction = new Instruction
             {
@@ -210,7 +228,9 @@ namespace RECS.Compiler
                     "LT" => Opcode.LtFloat,
                     "GTE" => Opcode.GteFloat,
                     "LTE" => Opcode.LteFloat,
-                    _ => throw new InvalidOperationException($"Unsupported operator: {operatorStr} for float/int type"),
+                    _ => throw new InvalidOperationException(
+                        $"Unsupported operator: {operatorStr} for float/int type"
+                    ),
                 };
             }
             else if (factType == typeof(string))
@@ -221,7 +241,9 @@ namespace RECS.Compiler
                     "NEQ" => Opcode.NeqString,
                     "CONTAINS" => Opcode.ContainsString,
                     "NOT_CONTAINS" => Opcode.NotContainsString,
-                    _ => throw new InvalidOperationException($"Unsupported operator: {operatorStr} for string type"),
+                    _ => throw new InvalidOperationException(
+                        $"Unsupported operator: {operatorStr} for string type"
+                    ),
                 };
             }
             else if (factType == typeof(bool))
@@ -230,7 +252,9 @@ namespace RECS.Compiler
                 {
                     "EQ" => Opcode.EqBool,
                     "NEQ" => Opcode.NeqBool,
-                    _ => throw new InvalidOperationException($"Unsupported operator: {operatorStr} for bool type"),
+                    _ => throw new InvalidOperationException(
+                        $"Unsupported operator: {operatorStr} for bool type"
+                    ),
                 };
             }
             else
@@ -244,19 +268,21 @@ namespace RECS.Compiler
             switch (value)
             {
                 case int intValue:
-                    return [..BitConverter.GetBytes(intValue)];
+                    return [.. BitConverter.GetBytes(intValue)];
                 case float floatValue:
-                    return [..BitConverter.GetBytes(floatValue)];
+                    return [.. BitConverter.GetBytes(floatValue)];
                 case string strValue:
                 {
                     var stringBytes = Encoding.UTF8.GetBytes(strValue);
                     var lengthBytes = BitConverter.GetBytes((ushort)stringBytes.Length);
-                    return [..lengthBytes.Concat(stringBytes).ToList()];
+                    return [.. lengthBytes.Concat(stringBytes).ToList()];
                 }
                 case bool boolValue:
                     return [(byte)(boolValue ? 1 : 0)];
                 default:
-                    throw new InvalidOperationException($"Unsupported value type: {value?.GetType().Name}");
+                    throw new InvalidOperationException(
+                        $"Unsupported value type: {value?.GetType().Name}"
+                    );
             }
         }
 
@@ -289,13 +315,18 @@ namespace RECS.Compiler
             }
             catch (CompilationErrorException e)
             {
-                Log.Error($"Script compilation failed for {scriptName}: {string.Join(", ", e.Diagnostics)}");
-                throw new InvalidOperationException($"Script compilation failed: {string.Join(", ", e.Diagnostics)}");
+                Log.Error(
+                    $"Script compilation failed for {scriptName}: {string.Join(", ", e.Diagnostics)}"
+                );
+                throw new InvalidOperationException(
+                    $"Script compilation failed: {string.Join(", ", e.Diagnostics)}"
+                );
             }
 
             // Add script parameters (if any)
             instruction.Operands.AddRange(BitConverter.GetBytes(script.Params?.Count ?? 0));
-            if (script.Params == null) return instruction;
+            if (script.Params == null)
+                return instruction;
             foreach (var param in script.Params)
             {
                 instruction.Operands.AddRange(EncodeString(param)[1].Operands);
@@ -305,17 +336,26 @@ namespace RECS.Compiler
         }
 
         // Method to execute a script using Roslyn during runtime
-        public async Task<object> ExecuteScriptAsync(string scriptBody, Dictionary<string, object> parameters)
+        public async Task<object> ExecuteScriptAsync(
+            string scriptBody,
+            Dictionary<string, object> parameters
+        )
         {
             try
             {
                 var scriptOptions = ScriptOptions.Default.AddReferences(typeof(object).Assembly);
-                var result = await CSharpScript.EvaluateAsync(scriptBody, scriptOptions, globals: new Globals(parameters));
+                var result = await CSharpScript.EvaluateAsync(
+                    scriptBody,
+                    scriptOptions,
+                    globals: new Globals(parameters)
+                );
                 return result;
             }
             catch (CompilationErrorException e)
             {
-                throw new InvalidOperationException($"Script execution failed: {string.Join(", ", e.Diagnostics)}");
+                throw new InvalidOperationException(
+                    $"Script execution failed: {string.Join(", ", e.Diagnostics)}"
+                );
             }
         }
 
@@ -332,16 +372,12 @@ namespace RECS.Compiler
             var stringBytes = Encoding.UTF8.GetBytes(str);
             var lengthBytes = BitConverter.GetBytes((ushort)stringBytes.Length);
 
-            instructions.Add(new Instruction
-            {
-                Opcode = Opcode.LoadConstString,
-                Operands = [..lengthBytes],
-            });
-            instructions.Add(new Instruction
-            {
-                Opcode = Opcode.LoadConstString,
-                Operands = [..stringBytes],
-            });
+            instructions.Add(
+                new Instruction { Opcode = Opcode.LoadConstString, Operands = [.. lengthBytes] }
+            );
+            instructions.Add(
+                new Instruction { Opcode = Opcode.LoadConstString, Operands = [.. stringBytes] }
+            );
 
             return instructions;
         }
@@ -351,11 +387,13 @@ namespace RECS.Compiler
             var instructions = new List<Instruction>();
             var intBytes = BitConverter.GetBytes(value);
 
-            instructions.Add(new Instruction
-            {
-                Opcode = Opcode.LoadConstFloat,
-                Operands = new List<byte>(intBytes),
-            });
+            instructions.Add(
+                new Instruction
+                {
+                    Opcode = Opcode.LoadConstFloat,
+                    Operands = new List<byte>(intBytes),
+                }
+            );
 
             return instructions;
         }
@@ -377,7 +415,11 @@ namespace RECS.Compiler
             return rootNode;
         }
 
-        private List<Instruction> GenerateInstructionsForConditions(ConditionOrGroup conditionNode, string successLabel, string failLabel)
+        private List<Instruction> GenerateInstructionsForConditions(
+            ConditionOrGroup conditionNode,
+            string successLabel,
+            string failLabel
+        )
         {
             var instructions = new List<Instruction>();
 
@@ -387,11 +429,24 @@ namespace RECS.Compiler
                 string nextFailLabel = failLabel;
                 for (int i = 0; i < conditionNode.All.Count; i++)
                 {
-                    var nextSuccessLabel = i == conditionNode.All.Count - 1 ? successLabel : GetNextLabel("L");
-                    instructions.AddRange(GenerateInstructionsForConditions(conditionNode.All[i], nextSuccessLabel, nextFailLabel));
+                    var nextSuccessLabel =
+                        i == conditionNode.All.Count - 1 ? successLabel : GetNextLabel("L");
+                    instructions.AddRange(
+                        GenerateInstructionsForConditions(
+                            conditionNode.All[i],
+                            nextSuccessLabel,
+                            nextFailLabel
+                        )
+                    );
                     if (i != conditionNode.All.Count - 1)
                     {
-                        instructions.Add(new Instruction { Opcode = Opcode.Label, Operands = new List<byte>(Encoding.UTF8.GetBytes(nextSuccessLabel)) });
+                        instructions.Add(
+                            new Instruction
+                            {
+                                Opcode = Opcode.Label,
+                                Operands = new List<byte>(Encoding.UTF8.GetBytes(nextSuccessLabel)),
+                            }
+                        );
                     }
                 }
             }
@@ -400,11 +455,24 @@ namespace RECS.Compiler
             {
                 for (int i = 0; i < conditionNode.Any.Count; i++)
                 {
-                    var nextFailLabel = i == conditionNode.Any.Count - 1 ? failLabel : GetNextLabel("L");
-                    instructions.AddRange(GenerateInstructionsForConditions(conditionNode.Any[i], successLabel, nextFailLabel));
+                    var nextFailLabel =
+                        i == conditionNode.Any.Count - 1 ? failLabel : GetNextLabel("L");
+                    instructions.AddRange(
+                        GenerateInstructionsForConditions(
+                            conditionNode.Any[i],
+                            successLabel,
+                            nextFailLabel
+                        )
+                    );
                     if (i != conditionNode.Any.Count - 1)
                     {
-                        instructions.Add(new Instruction { Opcode = Opcode.Label, Operands = new List<byte>(Encoding.UTF8.GetBytes(nextFailLabel)) });
+                        instructions.Add(
+                            new Instruction
+                            {
+                                Opcode = Opcode.Label,
+                                Operands = new List<byte>(Encoding.UTF8.GetBytes(nextFailLabel)),
+                            }
+                        );
                     }
                 }
             }
@@ -413,11 +481,13 @@ namespace RECS.Compiler
             {
                 // Generate condition instruction with jump to failLabel if false, successLabel if true
                 instructions.Add(GenerateConditionInstruction(conditionNode, false)); // JUMP_IF_FALSE to failLabel
-                instructions.Add(new Instruction 
-                { 
-                    Opcode = Opcode.JumpIfTrue,
-                    Operands = new List<byte>(Encoding.UTF8.GetBytes(successLabel)),
-                });
+                instructions.Add(
+                    new Instruction
+                    {
+                        Opcode = Opcode.JumpIfTrue,
+                        Operands = new List<byte>(Encoding.UTF8.GetBytes(successLabel)),
+                    }
+                );
             }
 
             return instructions;
@@ -428,9 +498,11 @@ namespace RECS.Compiler
             var facts = new List<string>();
 
             // Check if the instruction deals with facts
-            if (instruction.Opcode == Opcode.LoadFactFloat || 
-                instruction.Opcode == Opcode.LoadFactString || 
-                instruction.Opcode == Opcode.LoadFactBool)
+            if (
+                instruction.Opcode == Opcode.LoadFactFloat
+                || instruction.Opcode == Opcode.LoadFactString
+                || instruction.Opcode == Opcode.LoadFactBool
+            )
             {
                 var fact = Encoding.UTF8.GetString(instruction.Operands.ToArray());
                 facts.Add(fact);
@@ -467,9 +539,11 @@ namespace RECS.Compiler
                 var instruction = instructions[i];
 
                 // Combine JUMP_IF_TRUE and JUMP_IF_FALSE if they are adjacent
-                if (instruction.Opcode == Opcode.JumpIfFalse && 
-                    i + 1 < instructions.Count && 
-                    instructions[i + 1].Opcode == Opcode.JumpIfTrue)
+                if (
+                    instruction.Opcode == Opcode.JumpIfFalse
+                    && i + 1 < instructions.Count
+                    && instructions[i + 1].Opcode == Opcode.JumpIfTrue
+                )
                 {
                     optimizedInstructions.Add(new Instruction { Opcode = Opcode.Nop });
                     i++; // Skip the next instruction (JUMP_IF_TRUE)
@@ -485,7 +559,10 @@ namespace RECS.Compiler
         }
 
         // UserScript call handling during condition or bytecode execution phase
-        private Instruction GenerateScriptCallInstruction(string scriptName, List<string>? parameters)
+        private Instruction GenerateScriptCallInstruction(
+            string scriptName,
+            List<string>? parameters
+        )
         {
             var instruction = new Instruction { Opcode = Opcode.ScriptCall };
 
@@ -494,7 +571,8 @@ namespace RECS.Compiler
 
             // Add parameters
             instruction.Operands.AddRange(BitConverter.GetBytes(parameters?.Count ?? 0));
-            if (parameters == null) return instruction;
+            if (parameters == null)
+                return instruction;
             foreach (var param in parameters)
             {
                 instruction.Operands.AddRange(EncodeString(param)[1].Operands);

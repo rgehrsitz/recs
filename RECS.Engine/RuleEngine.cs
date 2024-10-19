@@ -7,8 +7,8 @@ namespace RECS.Engine
 {
     public class RuleEngine
     {
-        private List<Instruction> _bytecode = new List<Instruction>();
-        private Dictionary<string, object> _facts = new Dictionary<string, object>();
+        private List<Instruction> _bytecode = [];
+        private Dictionary<string, object> _facts = [];
 
         public RuleEngine()
         {

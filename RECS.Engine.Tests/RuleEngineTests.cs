@@ -9,16 +9,8 @@ namespace RECS.Engine.Tests
         {
             var bytecode = new List<Instruction>
             {
-                new()
-                {
-                    Opcode = Opcode.JumpIfFalse,
-                    Operands = [.."temperature>30"u8.ToArray()],
-                },
-                new()
-                {
-                    Opcode = Opcode.ExecuteAction,
-                    Operands = [.."print"u8.ToArray()],
-                },
+                new() { Opcode = Opcode.JumpIfFalse, Operands = [.. "temperature>30"u8.ToArray()] },
+                new() { Opcode = Opcode.ExecuteAction, Operands = [.. "print"u8.ToArray()] },
             };
 
             var engine = new RuleEngine();
@@ -38,16 +30,8 @@ namespace RECS.Engine.Tests
         {
             var bytecode = new List<Instruction>
             {
-                new()
-                {
-                    Opcode = Opcode.JumpIfFalse,
-                    Operands = [.."temperature>30"u8.ToArray()],
-                },
-                new()
-                {
-                    Opcode = Opcode.ExecuteAction,
-                    Operands = [.."print"u8.ToArray()],
-                },
+                new() { Opcode = Opcode.JumpIfFalse, Operands = [.. "temperature>30"u8.ToArray()] },
+                new() { Opcode = Opcode.ExecuteAction, Operands = [.. "print"u8.ToArray()] },
             };
 
             var engine = new RuleEngine();
@@ -59,10 +43,7 @@ namespace RECS.Engine.Tests
             Console.SetOut(consoleOutput);
             engine.Execute();
 
-            Assert.DoesNotContain(
-                "Executing action: Print to console.",
-                consoleOutput.ToString()
-            );
+            Assert.DoesNotContain("Executing action: Print to console.", consoleOutput.ToString());
         }
     }
 }

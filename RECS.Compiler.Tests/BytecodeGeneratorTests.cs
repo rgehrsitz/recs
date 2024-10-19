@@ -15,8 +15,7 @@ namespace RECS.Compiler.Tests
             Log.Logger = new LoggerConfiguration()
                 .MinimumLevel.Debug()
                 .WriteTo.Console() // Add console output for visibility
-                .WriteTo
-                .File("logs/recs_tests.log", rollingInterval: RollingInterval.Day) // Add file sink to store logs
+                .WriteTo.File("logs/recs_tests.log", rollingInterval: RollingInterval.Day) // Add file sink to store logs
                 .WriteTo.TestCorrelator() // Use TestCorrelator for assertions
                 .CreateLogger();
         }
@@ -28,35 +27,35 @@ namespace RECS.Compiler.Tests
             {
                 var ruleset = new Ruleset
                 {
-                    Rules = new List<Rule>
-                    {
-                        new Rule
+                    Rules =
+                    [
+                        new()
                         {
                             Name = "TestRule",
                             Priority = 1,
                             Conditions = new ConditionGroup
                             {
-                                All = new List<ConditionOrGroup>
-                                {
-                                    new ConditionOrGroup
+                                All =
+                                [
+                                    new()
                                     {
                                         Fact = "temperature",
                                         Operator = "GT",
                                         Value = 30,
                                     },
-                                },
+                                ],
                             },
-                            Actions = new List<RuleAction>
-                            {
-                                new RuleAction
+                            Actions =
+                            [
+                                new()
                                 {
                                     Type = "print",
                                     Target = "console",
                                     Value = "Temperature is greater than 30",
                                 },
-                            },
+                            ],
                         },
-                    },
+                    ],
                 };
 
                 var generator = new BytecodeGenerator();
@@ -92,12 +91,13 @@ namespace RECS.Compiler.Tests
                 var generator = new BytecodeGenerator();
                 var instructions = new List<Instruction>
                 {
-                    new() {
+                    new()
+                    {
                         Opcode = Opcode.Label,
                         Operands = new List<byte>(System.Text.Encoding.UTF8.GetBytes("L001")),
                     },
-                    new() {
-
+                    new()
+                    {
                         Opcode = Opcode.JumpIfFalse,
                         Operands = new List<byte>(BitConverter.GetBytes(0)),
                     },
@@ -222,12 +222,12 @@ namespace RECS.Compiler.Tests
             var generator = new BytecodeGenerator();
             var instructions = new List<Instruction>
             {
-                new Instruction
+                new()
                 {
                     Opcode = Opcode.JumpIfFalse,
                     Operands = new List<byte>(Encoding.UTF8.GetBytes("L001")),
                 },
-                new Instruction
+                new()
                 {
                     Opcode = Opcode.Label,
                     Operands = new List<byte>(Encoding.UTF8.GetBytes("L001")),
@@ -332,9 +332,9 @@ namespace RECS.Compiler.Tests
         {
             var ruleset = new Ruleset
             {
-                Rules = new List<Rule>
-                {
-                    new Rule
+                Rules =
+                [
+                    new()
                     {
                         Name = "EmptyConditionsRule",
                         Priority = 1,
@@ -342,7 +342,7 @@ namespace RECS.Compiler.Tests
                             new ConditionGroup() // No conditions defined
                         ,
                     },
-                },
+                ],
             };
 
             var generator = new BytecodeGenerator();
@@ -357,17 +357,17 @@ namespace RECS.Compiler.Tests
         {
             var ruleset = new Ruleset
             {
-                Rules = new List<Rule>
-                {
-                    new Rule
+                Rules =
+                [
+                    new()
                     {
                         Name = "AlwaysTrueConditionRule",
                         Priority = 1,
                         Conditions = new ConditionGroup
                         {
-                            All = new List<ConditionOrGroup>
-                            {
-                                new ConditionOrGroup
+                            All =
+                            [
+                                new()
                                 {
                                     Fact = "temperature",
                                     Operator = "EQ",
@@ -375,10 +375,10 @@ namespace RECS.Compiler.Tests
                                         "temperature" // Always true condition
                                     ,
                                 },
-                            },
+                            ],
                         },
                     },
-                },
+                ],
             };
 
             var generator = new BytecodeGenerator();
@@ -393,35 +393,35 @@ namespace RECS.Compiler.Tests
         {
             var ruleset = new Ruleset
             {
-                Rules = new List<Rule>
-                {
-                    new Rule
+                Rules =
+                [
+                    new()
                     {
                         Name = "ValidConditionRule",
                         Priority = 1,
                         Conditions = new ConditionGroup
                         {
-                            All = new List<ConditionOrGroup>
-                            {
-                                new ConditionOrGroup
+                            All =
+                            [
+                                new()
                                 {
                                     Fact = "temperature",
                                     Operator = "GT",
                                     Value = 30,
                                 },
-                            },
+                            ],
                         },
-                        Actions = new List<RuleAction>
-                        {
-                            new RuleAction
+                        Actions =
+                        [
+                            new()
                             {
                                 Type = "print",
                                 Target = "console",
                                 Value = "Temperature is greater than 30",
                             },
-                        },
+                        ],
                     },
-                },
+                ],
             };
 
             var generator = new BytecodeGenerator();
@@ -438,36 +438,36 @@ namespace RECS.Compiler.Tests
         {
             var ruleset = new Ruleset
             {
-                Rules = new List<Rule>
-                {
-                    new Rule
+                Rules =
+                [
+                    new()
                     {
                         Name = "EmptyActionTargetRule",
                         Priority = 1,
                         Conditions = new ConditionGroup
                         {
-                            All = new List<ConditionOrGroup>
-                            {
-                                new ConditionOrGroup
+                            All =
+                            [
+                                new()
                                 {
                                     Fact = "temperature",
                                     Operator = "GT",
                                     Value = 30,
                                 },
-                            },
+                            ],
                         },
-                        Actions = new List<RuleAction>
-                        {
-                            new RuleAction
+                        Actions =
+                        [
+                            new()
                             {
                                 Type = "print",
                                 Target =
                                     "" // Redundant action with empty target
                                 ,
                             },
-                        },
+                        ],
                     },
-                },
+                ],
             };
 
             var generator = new BytecodeGenerator();
